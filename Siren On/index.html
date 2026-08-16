@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SirenLink</title>
+
+    <link rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+    <style>
+        body {
+            font-family: Arial;
+            text-align: center;
+            margin-top: 30px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            font-size: 32px;
+        }
+
+        button {
+            padding: 16px 25px;
+            font-size: 19px;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            margin: 6px;
+            cursor: pointer;
+        }
+
+        .ambulance-btn {
+            background: red;
+        }
+
+        .fire-btn {
+            background: orange;
+        }
+
+        .off-btn {
+            background: gray;
+        }
+
+        .box {
+            width: 85%;
+            margin: 20px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+        }
+
+        #controlRoom {
+            display: none;
+            border: 3px solid blue;
+        }
+
+        #priorityBox {
+            border: 2px solid orange;
+            background: #fff8dc;
+            padding: 15px;
+            margin: 15px;
+            border-radius: 10px;
+        }
+
+        #routeBox {
+            display: none;
+            border: 3px solid green;
+        }
+
+        #map {
+            height: 450px;
+            width: 90%;
+            margin: 20px auto;
+            border: 3px solid blue;
+            border-radius: 12px;
+            display: none;
+        }
+
+        .details {
+            background: #eeeeee;
+            padding: 15px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>🚦 SirenLink Traffic Control Room</h1>
+
+<!-- ================= VEHICLES ================= -->
+
+<div class="box">
+
+    <h2>🚨 Emergency Vehicles</h2>
+
+    <button class="ambulance-btn"
+            onclick="ambulanceSirenOn()">
+        🚑 Ambulance Siren ON
+    </button>
+
+    <button class="fire-btn"
+            onclick="fireEngineSirenOn()">
+        🚒 Fire Engine Siren ON
+    </button>
+
+</div>
+
+
+<!-- ================= CONTROL ROOM ================= -->
+
+<div id="controlRoom" class="box">
+
+    <h2>🖥️ Control Room</h2>
+
+    <h2 id="detectedTitle">
+        Waiting for emergency vehicle...
+    </h2>
+
+    <p id="detectedMessage">
+        No siren detected.
+    </p>
+
+
+    <div class="details">
+
+        <p id="vehicleNumber">
+            🚘 Vehicle Number: -
+        </p>
+
+        <p id="vehicleType">
+            🚨 Vehicle Type: -
+        </p>
+
+        <p id="location">
+            📍 Location: -
+        </p>
+
+        <p id="destination">
+            🎯 Destination: -
+        </p>
+
+        <p id="sirenStatus">
+            🔊 Siren Status: -
+        </p>
+
+    </div>
+
+
+    <!-- PRIORITY -->
+
+    <div id="priorityBox">
+
+        <h3>🚨 Emergency Priority</h3>
+
+        <p id="priorityText">
+            Waiting for emergency...
+        </p>
+
+    </div>
+
+
+    <!-- CONTROL ROOM OFF -->
+
+    <button class="off-btn"
+            onclick="controlRoomSirenOff()">
+
+        🔇 Control Room - Siren OFF
+
+    </button>
+
+</div>
+
+
+<!-- ================= ROUTE ================= -->
+
+<div id="routeBox" class="box">
+
+    <h2 id="routeTitle">
+        🚨 Emergency Route
+    </h2>
+
+    <p id="routeText">
+        Route information
+    </p>
+
+    <p id="routeTime">
+        ⏱️ Estimated Time: -
+    </p>
+
+</div>
+<!-- TRAFFIC ANALYSIS -->
+
+<div id="trafficBox"
+     class="box"
+     style="display:none; border:3px solid purple;">
+
+    <h2>🚦 Traffic Analysis</h2>
+
+    <div id="trafficStatus"></div>
+
+    <hr>
+
+    <h2>🚨 Fastest Route</h2>
+
+    <div id="fastestRoutes"></div>
+
+</div>
+
+<h2 id="mapTitle" style="display:none;">
+    🗺️ Emergency Vehicle Routes
+</h2>
+
+<div id="map"></div>
+
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+
+<script>
+
+// =================================================
+// AUDIO
+// =================================================
+
+let ambulanceSiren =
+    new Audio("ambulance.mp3");
+
+let fireEngineSiren =
+    new Audio("fireengine.mp3");
+
+ambulanceSiren.loop = true;
+fireEngineSiren.loop = true;
+
+
+// =================================================
+// CURRENT VEHICLE
+// =================================================
+
+let currentVehicle = "";
+
+
+// =================================================
+// MAP
+// =================================================
+
+let map = L.map("map").setView(
+    [13.0827, 80.2707],
+    13
+);
+
+
+L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+        attribution:
+        "© OpenStreetMap contributors"
+    }
+).addTo(map);
+
+
+// =================================================
+// MARKERS
+// =================================================
+
+// Ambulance
+
+let ambulanceMarker =
+    L.marker([13.0827, 80.2707])
+    .addTo(map)
+    .bindPopup("🚑 Ambulance");
+
+
+// Fire Engine
+
+let fireMarker =
+    L.marker([13.0900, 80.2500])
+    .addTo(map)
+    .bindPopup("🚒 Fire Engine");
+
+
+// Police
+
+let policeMarker =
+    L.marker([13.1050, 80.2800])
+    .addTo(map)
+    .bindPopup("🚔 Police Station");
+
+
+// Hospital
+
+let hospitalMarker =
+    L.marker([13.0674, 80.2376])
+    .addTo(map)
+    .bindPopup("🏥 GH Hospital");
+
+
+// Accident Location
+
+let accidentMarker =
+    L.marker([13.0820, 80.2550])
+    .addTo(map)
+    .bindPopup("🚨 Accident Location");
+
+
+// Fire Location
+
+let fireLocationMarker =
+    L.marker([13.0950, 80.2400])
+    .addTo(map)
+    .bindPopup("🔥 Fire Emergency Location");
+
+
+// =================================================
+// AMBULANCE ROUTE
+// =================================================
+
+let ambulanceRoute =
+    L.polyline(
+        [
+            [13.0827, 80.2707],
+            [13.0820, 80.2550],
+            [13.0780, 80.2450],
+            [13.0674, 80.2376]
+        ],
+        {
+            color: "red",
+            weight: 7
+        }
+    ).addTo(map);
+
+
+// =================================================
+// POLICE → ACCIDENT ROUTE
+// =================================================
+
+let policeAccidentRoute =
+    L.polyline(
+        [
+            [13.1050, 80.2800],
+            [13.0980, 80.2700],
+            [13.0900, 80.2620],
+            [13.0820, 80.2550]
+        ],
+        {
+            color: "blue",
+            weight: 6
+        }
+    ).addTo(map);
+
+
+// =================================================
+// FIRE ENGINE ROUTE
+// =================================================
+
+let fireRoute =
+    L.polyline(
+        [
+            [13.0900, 80.2500],
+            [13.0920, 80.2460],
+            [13.0950, 80.2400]
+        ],
+        {
+            color: "orange",
+            weight: 7
+        }
+    ).addTo(map);
+
+
+// =================================================
+// AMBULANCE → FIRE ROUTE
+// =================================================
+
+let fireAmbulanceRoute =
+    L.polyline(
+        [
+            [13.0827, 80.2707],
+            [13.0870, 80.2600],
+            [13.0920, 80.2500],
+            [13.0950, 80.2400]
+        ],
+        {
+            color: "purple",
+            weight: 6
+        }
+    ).addTo(map);
+
+
+// =================================================
+// POLICE → FIRE ROUTE
+// =================================================
+
+let policeFireRoute =
+    L.polyline(
+        [
+            [13.1050, 80.2800],
+            [13.1020, 80.2650],
+            [13.0980, 80.2500],
+            [13.0950, 80.2400]
+        ],
+        {
+            color: "blue",
+            weight: 6
+        }
+    ).addTo(map);
+
+
+// =================================================
+// HIDE ROUTES INITIALLY
+// =================================================
+
+ambulanceRoute.setStyle({
+    opacity: 0
+});
+
+policeAccidentRoute.setStyle({
+    opacity: 0
+});
+
+fireRoute.setStyle({
+    opacity: 0
+});
+
+fireAmbulanceRoute.setStyle({
+    opacity: 0
+});
+
+policeFireRoute.setStyle({
+    opacity: 0
+});
+
+
+// Hide markers initially
+
+ambulanceMarker.setOpacity(0);
+fireMarker.setOpacity(0);
+policeMarker.setOpacity(0);
+hospitalMarker.setOpacity(0);
+accidentMarker.setOpacity(0);
+fireLocationMarker.setOpacity(0);
+
+
+// =================================================
+// ACCIDENT PRIORITY
+// =================================================
+
+function showAccidentPriority() {
+
+    document.getElementById(
+        "priorityText"
+    ).innerHTML = `
+
+        🥇 <b>Priority 1:</b> 🚑 Ambulance
+        <br><br>
+
+        🥈 <b>Priority 2:</b> 🚔 Police
+
+    `;
+}
+
+
+// =================================================
+// FIRE PRIORITY
+// =================================================
+
+function showFirePriority() {
+
+    document.getElementById(
+        "priorityText"
+    ).innerHTML = `
+
+        🥇 <b>Priority 1:</b> 🚒 Fire Engine
+        <br><br>
+
+        🥈 <b>Priority 2:</b> 🚑 Ambulance
+        <br><br>
+
+        🥉 <b>Priority 3:</b> 🚔 Police
+
+    `;
+}
+
+
+// =================================================
+// ACCIDENT ROUTES
+// =================================================
+
+function showAccidentRoutes() {
+
+    // Ambulance
+
+    ambulanceRoute.setStyle({
+        opacity: 1
+    });
+
+    // Police
+
+    policeAccidentRoute.setStyle({
+        opacity: 1
+    });
+
+    // Hide fire routes
+
+    fireRoute.setStyle({
+        opacity: 0
+    });
+
+    fireAmbulanceRoute.setStyle({
+        opacity: 0
+    });
+
+    policeFireRoute.setStyle({
+        opacity: 0
+    });
+
+
+    // Show markers
+
+    ambulanceMarker.setOpacity(1);
+    policeMarker.setOpacity(1);
+    hospitalMarker.setOpacity(1);
+    accidentMarker.setOpacity(1);
+
+    fireMarker.setOpacity(0);
+    fireLocationMarker.setOpacity(0);
+
+
+    // Route information
+
+    document.getElementById(
+        "routeTitle"
+    ).innerHTML =
+        "🚨 Accident Emergency Routes";
+
+
+    document.getElementById(
+        "routeText"
+    ).innerHTML = `
+
+        🚑 <b>Ambulance:</b>
+        Ambulance → Accident Location → GH Hospital
+
+        <br><br>
+
+        🚔 <b>Police:</b>
+        Police Station → Accident Location
+
+    `;
+
+
+    document.getElementById(
+        "routeTime"
+    ).innerHTML = `
+
+        🚑 Ambulance: <b>8 minutes</b>
+        <br>
+
+        🚔 Police: <b>5 minutes</b>
+
+    `;
+}
+
+
+// =================================================
+// FIRE ROUTES
+// =================================================
+
+function showFireRoutes() {
+
+    // Fire Engine
+
+    fireRoute.setStyle({
+        opacity: 1
+    });
+
+    // Ambulance
+
+    fireAmbulanceRoute.setStyle({
+        opacity: 1
+    });
+
+    // Police
+
+    policeFireRoute.setStyle({
+        opacity: 1
+    });
+
+
+    // Hide normal accident route
+
+    ambulanceRoute.setStyle({
+        opacity: 0
+    });
+
+    policeAccidentRoute.setStyle({
+        opacity: 0
+    });
+
+
+    // Markers
+
+    ambulanceMarker.setOpacity(1);
+    fireMarker.setOpacity(1);
+    policeMarker.setOpacity(1);
+    fireLocationMarker.setOpacity(1);
+
+    hospitalMarker.setOpacity(0);
+    accidentMarker.setOpacity(0);
+
+
+    // Route information
+
+    document.getElementById(
+        "routeTitle"
+    ).innerHTML =
+        "🔥 Fire Emergency Routes";
+
+
+    document.getElementById(
+        "routeText"
+    ).innerHTML = `
+
+        🚒 <b>Fire Engine:</b>
+        Fire Station → Fire Emergency Location
+
+        <br><br>
+
+        🚑 <b>Ambulance:</b>
+        Ambulance → Fire Emergency Location
+
+        <br><br>
+
+        🚔 <b>Police:</b>
+        Police Station → Fire Emergency Location
+
+    `;
+
+
+    document.getElementById(
+        "routeTime"
+    ).innerHTML = `
+
+        🚒 Fire Engine: <b>6 minutes</b>
+        <br>
+
+        🚑 Ambulance: <b>8 minutes</b>
+        <br>
+
+        🚔 Police: <b>5 minutes</b>
+
+    `;
+}
+
+
+// =================================================
+// 🚑 AMBULANCE SIREN ON
+// =================================================
+
+function ambulanceSirenOn() {
+
+    // Stop Fire Engine
+
+    fireEngineSiren.pause();
+    fireEngineSiren.currentTime = 0;
+
+
+    // Start Ambulance
+
+    ambulanceSiren.play();
+
+
+    currentVehicle = "Ambulance";
+
+
+    // Show Control Room
+
+    document.getElementById(
+        "controlRoom"
+    ).style.display = "block";
+
+
+    // Detection
+
+    document.getElementById(
+        "detectedTitle"
+    ).innerHTML =
+        "🚑 AMBULANCE SIREN DETECTED";
+
+
+    document.getElementById(
+        "detectedMessage"
+    ).innerHTML =
+        "📡 Ambulance siren signal received by Control Room";
+
+
+    // Details
+
+    document.getElementById(
+        "vehicleNumber"
+    ).innerHTML =
+        "🚘 Vehicle Number: <b>TN01 AB 1234</b>";
+
+
+    document.getElementById(
+        "vehicleType"
+    ).innerHTML =
+        "🚑 Vehicle Type: <b>Ambulance</b>";
+
+
+    document.getElementById(
+        "location"
+    ).innerHTML =
+        "📍 Location: <b>Anna Nagar</b>";
+
+
+    document.getElementById(
+        "destination"
+    ).innerHTML =
+        "🏥 Destination: <b>GH Hospital</b>";
+
+
+    document.getElementById(
+        "sirenStatus"
+    ).innerHTML =
+        "🔊 Siren Status: <b>ON</b>";
+
+
+    // Priority
+
+    showAccidentPriority();
+
+
+    // Routes
+
+    document.getElementById(
+        "routeBox"
+    ).style.display = "block";
+
+    showAccidentRoutes();
+    showTrafficAnalysis();
+
+
+    // Map
+
+    document.getElementById(
+        "map"
+    ).style.display = "block";
+
+    document.getElementById(
+        "mapTitle"
+    ).style.display = "block";
+
+
+    map.invalidateSize();
+
+}
+
+
+// =================================================
+// 🚒 FIRE ENGINE SIREN ON
+// =================================================
+
+function fireEngineSirenOn() {
+
+    // Stop Ambulance
+
+    ambulanceSiren.pause();
+    ambulanceSiren.currentTime = 0;
+
+
+    // Start Fire Engine
+
+    fireEngineSiren.play();
+
+
+    currentVehicle =
+        "Fire Engine";
+
+
+    // Control Room
+
+    document.getElementById(
+        "controlRoom"
+    ).style.display = "block";
+
+
+    // Detection
+
+    document.getElementById(
+        "detectedTitle"
+    ).innerHTML =
+        "🚒 FIRE ENGINE SIREN DETECTED";
+
+
+    document.getElementById(
+        "detectedMessage"
+    ).innerHTML =
+        "📡 Fire Engine siren signal received by Control Room";
+
+
+    // Details
+
+    document.getElementById(
+        "vehicleNumber"
+    ).innerHTML =
+        "🚘 Vehicle Number: <b>TN02 CD 5678</b>";
+
+
+    document.getElementById(
+        "vehicleType"
+    ).innerHTML =
+        "🚒 Vehicle Type: <b>Fire Engine</b>";
+
+
+    document.getElementById(
+        "location"
+    ).innerHTML =
+        "📍 Location: <b>Anna Nagar</b>";
+
+
+    document.getElementById(
+        "destination"
+    ).innerHTML =
+        "🔥 Destination: <b>Fire Emergency Location</b>";
+
+
+    document.getElementById(
+        "sirenStatus"
+    ).innerHTML =
+        "🔊 Siren Status: <b>ON</b>";
+
+
+    // Priority
+
+    showFirePriority();
+
+
+    // Routes
+
+    document.getElementById(
+        "routeBox"
+    ).style.display = "block";
+
+    showFireRoutes();
+    showTrafficAnalysis();
+
+
+    // Map
+
+    document.getElementById(
+        "map"
+    ).style.display = "block";
+
+    document.getElementById(
+        "mapTitle"
+    ).style.display = "block";
+
+
+    map.invalidateSize();
+
+}
+
+
+// =================================================
+// 🔇 CONTROL ROOM SIREN OFF
+// =================================================
+
+function controlRoomSirenOff() {
+
+    // Stop both sounds
+
+    ambulanceSiren.pause();
+    ambulanceSiren.currentTime = 0;
+
+    fireEngineSiren.pause();
+    fireEngineSiren.currentTime = 0;
+
+
+    // Status OFF
+
+    document.getElementById(
+        "sirenStatus"
+    ).innerHTML =
+        "🔇 Siren Status: <b>OFF</b>";
+
+
+    document.getElementById(
+        "detectedMessage"
+    ).innerHTML =
+        "📡 Siren turned OFF from Control Room";
+
+
+    // Route stays visible
+
+    if (currentVehicle === "Ambulance") {
+
+        showAccidentRoutes();
+
+    }
+
+    else if (
+        currentVehicle === "Fire Engine"
+    ) {
+
+        showFireRoutes();
+
+    }
+
+
+    map.invalidateSize();
+
+}
+// =================================================
+// TRAFFIC DATA
+// =================================================
+
+const trafficData = {
+
+    "Junction 1": {
+        traffic: "High",
+        time: 6
+    },
+
+    "Junction 2": {
+        traffic: "Low",
+        time: 3
+    },
+
+    "Junction 3": {
+        traffic: "Medium",
+        time: 4
+    },
+
+    "Junction 4": {
+        traffic: "Low",
+        time: 2
+    }
+
+};
+
+
+// =================================================
+// SHOW TRAFFIC
+// =================================================
+
+function showTrafficAnalysis() {
+
+    document.getElementById("trafficBox")
+        .style.display = "block";
+
+
+    let trafficHTML = "";
+
+    for (let junction in trafficData) {
+
+        let data = trafficData[junction];
+
+        let icon = "🟢";
+
+        if (data.traffic === "High") {
+            icon = "🔴";
+        }
+
+        else if (data.traffic === "Medium") {
+            icon = "🟡";
+        }
+
+        trafficHTML += `
+            <p>
+                ${icon}
+                <b>${junction}</b>
+                -
+                Traffic:
+                <b>${data.traffic}</b>
+                -
+                Estimated:
+                <b>${data.time} min</b>
+            </p>
+        `;
+    }
+
+
+    document.getElementById("trafficStatus")
+        .innerHTML = trafficHTML;
+
+
+    // Fastest junction
+
+    let fastestJunction = "";
+    let fastestTime = Infinity;
+
+
+    for (let junction in trafficData) {
+
+        if (trafficData[junction].time < fastestTime) {
+
+            fastestTime =
+                trafficData[junction].time;
+
+            fastestJunction =
+                junction;
+        }
+    }
+
+
+    // =================================================
+    // AMBULANCE
+    // =================================================
+
+    if (currentVehicle === "Ambulance") {
+
+        document.getElementById("fastestRoutes")
+            .innerHTML = `
+
+            <div class="details">
+
+                🚑 <b>Ambulance Fastest Route</b>
+
+                <p>
+                    Ambulance
+                    → ${fastestJunction}
+                    → Accident Location
+                    → GH Hospital
+                </p>
+
+                <p>
+                    🚦 Traffic:
+                    <b>Low</b>
+                </p>
+
+                <p>
+                    ⏱️ Estimated Time:
+                    <b>${fastestTime} minutes</b>
+                </p>
+
+                <p>
+                    ✅ Recommended:
+                    <b>Use ${fastestJunction}</b>
+                </p>
+
+            </div>
+
+            <div class="details">
+
+                🚔 <b>Police Fastest Route</b>
+
+                <p>
+                    Police Station
+                    → ${fastestJunction}
+                    → Accident Location
+                </p>
+
+                <p>
+                    ⏱️ Estimated Time:
+                    <b>${fastestTime} minutes</b>
+                </p>
+
+            `;
+    }
+
+
+    // =================================================
+    // FIRE ENGINE
+    // =================================================
+
+    else if (currentVehicle === "Fire Engine") {
+
+        document.getElementById("fastestRoutes")
+            .innerHTML = `
+
+            <div class="details">
+
+                🚒 <b>Fire Engine Fastest Route</b>
+
+                <p>
+                    Fire Station
+                    → ${fastestJunction}
+                    → Fire Emergency Location
+                </p>
+
+                <p>
+                    🚦 Traffic:
+                    <b>Low</b>
+                </p>
+
+                <p>
+                    ⏱️ Estimated Time:
+                    <b>${fastestTime} minutes</b>
+                </p>
+
+                <p>
+                    ✅ Recommended:
+                    <b>Use ${fastestJunction}</b>
+                </p>
+
+            </div>
+
+
+            <div class="details">
+
+                🚑 <b>Ambulance Route</b>
+
+                <p>
+                    Ambulance
+                    → ${fastestJunction}
+                    → Fire Emergency Location
+                </p>
+
+                <p>
+                    ⏱️ Estimated Time:
+                    <b>${fastestTime} minutes</b>
+                </p>
+
+            </div>
+
+
+            <div class="details">
+
+                🚔 <b>Police Route</b>
+
+                <p>
+                    Police Station
+                    → ${fastestJunction}
+                    → Fire Emergency Location
+                </p>
+
+                <p>
+                    ⏱️ Estimated Time:
+                    <b>${fastestTime} minutes</b>
+                </p>
+
+            </div>
+
+            `;
+    }
+
+}
+
+</script>
+
+</body>
+</html>
